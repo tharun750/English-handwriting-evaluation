@@ -18,18 +18,12 @@ from services.ai_ocr import extract_handwritten_text
 from services.ai_evaluation import evaluate_handwriting
 from services.feedback import generate_personalized_feedback
 
-
-
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 
-# -------------------------------------------------------------
-# AUTHENTICATION & ROLE ACCESS DECORATORS
-# -------------------------------------------------------------
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -57,18 +51,12 @@ def role_required(required_role):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-# -------------------------------------------------------------
-# SECURE UPLOADED IMAGE SERVING ENDPOINT
-# -------------------------------------------------------------
 @app.route('/uploads/<path:filename>')
 @login_required
 def uploaded_file(filename):
     safe_name = os.path.basename(filename)
     return send_from_directory(app.config['UPLOAD_FOLDER'], safe_name)
 
-# -------------------------------------------------------------
-# MAIN AUTHENTICATION ROUTES
-# -------------------------------------------------------------
 @app.route('/')
 def index():
     if 'user_id' in session:
@@ -164,9 +152,7 @@ def logout():
     flash('You have been logged out successfully.', 'info')
     return redirect(url_for('login'))
 
-# -------------------------------------------------------------
-# STUDENT WORKFLOW & PYTORCH CNN EVALUATION
-# -------------------------------------------------------------
+
 @app.route('/student/dashboard')
 @login_required
 @role_required('student')
@@ -228,31 +214,27 @@ def upload():
             file.save(save_path)
 
             try:
-                # 1. Image Quality Check
+              
                 quality_info = check_image_quality(save_path)
                 
-                # 2. Conservative OpenCV Preprocessing & Safety Inspection
+                
                 processed_filename, processed_abs_path, debug_lines_filename, debug_lines_abs_path, is_safe, preview_label = preprocess_handwriting_image(
                     save_path, app.config['UPLOAD_FOLDER']
                 )
                 
-                # 3. Gemini Vision AI Primary Handwriting OCR Transcription (from ORIGINAL image)
+               
                 ocr_res = extract_handwritten_text(save_path)
                 extracted_text = ocr_res['text']
                 ocr_conf = ocr_res['confidence']
                 ocr_status = ocr_res['status']
                 ocr_engine = ocr_res['engine']
                 
-                # 4. Gemini Vision AI Model Evaluation (from ORIGINAL image)
                 eval_res = evaluate_handwriting(save_path, quality_info=quality_info, ocr_conf=ocr_conf, ocr_status=ocr_status)
 
-
-                
                 score = eval_res['overall_score']
                 grade = eval_res['grade']
                 reliability = eval_res.get('evaluation_reliability', 'High')
                 
-                # 5. Extract Feedback, Strengths, and Areas for Improvement
                 feedback_text = eval_res.get('summary', 'Evaluation completed.')
                 strengths = eval_res.get('strengths', [])
                 improvements = eval_res.get('improvements', [])
@@ -265,7 +247,6 @@ def upload():
                 else:
                     suggestion = "Maintain your regular handwriting posture, pen grip, and steady baseline practice!"
 
-                # 6. Database Persistence (Normalized 3NF)
                 image_id = execute_query(
                     """INSERT INTO HANDWRITTEN_IMAGE 
                        (student_id, image_path, processed_image_path, debug_lines_path, image_quality_score, image_quality_status) 
@@ -340,7 +321,6 @@ def result(image_id):
         flash('Evaluation record not found.', 'danger')
         return redirect(url_for('student_dashboard'))
 
-    # Security check: Students can only view their own results
     if session.get('role') == 'student' and res['student_id'] != session.get('student_id'):
         flash('Access denied to requested evaluation record.', 'danger')
         return redirect(url_for('student_dashboard'))
@@ -407,10 +387,6 @@ def progress():
     )
 
 
-
-# -------------------------------------------------------------
-# TEACHER WORKFLOW ROUTES
-# -------------------------------------------------------------
 @app.route('/teacher/dashboard')
 @login_required
 @role_required('teacher')
@@ -489,9 +465,6 @@ def teacher_student_details(student_id):
 
     return render_template('student_details.html', student=student, evaluations=evaluations)
 
-# -------------------------------------------------------------
-# APPLICATION ENTRYPOINT
-# -------------------------------------------------------------
 if __name__ == '__main__':
     print("Starting English Handwriting Evaluation System...")
     app.run(host='127.0.0.1', port=5000, debug=Config.DEBUG)
